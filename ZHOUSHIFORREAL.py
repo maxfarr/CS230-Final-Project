@@ -1,9 +1,15 @@
 from __future__ import print_function, division
+import tensorflow as tf
+from keras.backend.tensorflow_backend import set_session
+config = tf.ConfigProto()
+config.gpu_options.allow_growth = True
+set_session(tf.Session(config=config))
 
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import time
+import os
 
 if __name__ != '__mp_main__':
     import disfa_fetch
@@ -235,19 +241,22 @@ class CDAEE():
 
         return Model(reconstructed, validity)
 
-    def train(self, fetcher, epochs, batch_size=32, sample_interval=10):
-        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S %p')
+    def train(self, epochs, batch_size=32, sample_interval=10):
+        timestamp = datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
+
+        os.mkdir(timestamp)
 
         #list 0 is training, 1 is test
         dg_losses = [[], []]
         de_losses = [[], []]
         g_losses = [[], []]
 
+        fetcher = disfa_fetch.Fetcher()
+
         for epoch in range(epochs):
             folds = fetcher.fetch()
 
             # train with folds
-                
             for i, (Y_te, labels_te, X_te) in enumerate(folds):
                 indices = [x for x in range(4) if x != i]
                 X_tr = np.concatenate([folds[x][2] for x in indices])
@@ -274,6 +283,7 @@ class CDAEE():
                     b_i_size = min(batch_size, X_tr.shape[0] - (batch_i * batch_size))
                     X_batch = X_tr[batch_i * batch_size : batch_i * batch_size + b_i_size]
                     Y_batch = Y_tr[batch_i * batch_size : batch_i * batch_size + b_i_size]
+                    if len(X_batch) == 0: continue
                     labels_batch = labels_tr[batch_i * batch_size : batch_i * batch_size + b_i_size]
                     latent_fake_pooled = self.encoder1.predict(X_batch)
                     latent_fake = self.encoder2.predict(latent_fake_pooled)
@@ -415,7 +425,7 @@ class CDAEE():
                     au_ids = [1, 2, 4, 5, 6, 9, 12, 15, 17, 20, 25, 26]
                     
                     label = ([0.0, 0.0, float(j - 1)/c, 0.0, 0.0, 0.0, float(i)/r, 0.0, 0.0, 0.0, 0.0, 0.0]
-                    if img == 0 else ([0.0, float(j - 1)/c, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, float(i)/r, float(i)/r]
+                    if img == 0 else ([0.0, float(j - 1)/c, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, float(i)/r, float(i)/r]
                     if img == 1 else [0.0, 0.0, float(i)/r, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, float(j - 1)/c, 0.0]))
                     decoded = self.decoder1.predict([z, np.array([label])])
                     reconstructed = self.decoder2.predict([decoded, pooled])
