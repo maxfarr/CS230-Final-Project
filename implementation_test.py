@@ -1,4 +1,4 @@
-import cdaee
+import ZHOUSHIFORREAL
 
-autoencoder = cdaee.CDAEE()
-autoencoder.train(epochs=20000, batch_size=128, sample_interval=200)
+autoencoder = ZHOUSHIFORREAL.CDAEE()
+autoencoder.train(epochs=40, batch_size=32, sample_interval=10)
