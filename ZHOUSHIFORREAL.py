@@ -3,16 +3,19 @@ from __future__ import print_function, division
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import time
 
-from keras.layers import Input, Dense, Reshape, Flatten, Dropout, multiply, GaussianNoise, Lambda
-from keras.layers import BatchNormalization, Activation, Embedding, ZeroPadding2D, Layer
-from keras.layers import MaxPooling2D, merge, Add, Multiply, Concatenate, Conv2DTranspose, Conv2D, UpSampling2D
-from keras.layers.advanced_activations import LeakyReLU
-from keras.models import Sequential, Model
-from keras.optimizers import Adam
-from keras import losses
-from keras.utils import to_categorical, multi_gpu_model
-import keras.backend as K
+if __name__ != '__mp_main__':
+    import disfa_fetch
+    from keras.layers import Input, Dense, Reshape, Flatten, Dropout, multiply, GaussianNoise, Lambda
+    from keras.layers import BatchNormalization, Activation, Embedding, ZeroPadding2D, Layer
+    from keras.layers import MaxPooling2D, merge, Add, Multiply, Concatenate, Conv2DTranspose, Conv2D, UpSampling2D
+    from keras.layers.advanced_activations import LeakyReLU
+    from keras.models import Sequential, Model
+    from keras.optimizers import Adam
+    from keras import losses
+    from keras.utils import to_categorical
+    import keras.backend as K
 
 from datetime import datetime
 
@@ -34,10 +37,10 @@ class CDAEE():
         optimizer_d = Adam(0.000001)
 
         # Build and compile the discriminators
-        self.disc_g = multi_gpu_model(self.build_disc_g(), 4)
+        self.disc_g = self.build_disc_g()
         self.disc_g.name = "disc_g"
 
-        self.disc_e = multi_gpu_model(self.build_disc_e(), 4)
+        self.disc_e = self.build_disc_e()
         self.disc_e.name = "disc_e"
 
         n_disc_trainable = len(self.disc_g.trainable_weights)
@@ -64,7 +67,7 @@ class CDAEE():
         self.decoder2.name = "decoder2"
         self.decoder2.summary()
         
-        self.adversarial_autoencoder = multi_gpu_model(self.build_stacked(), 4)
+        self.adversarial_autoencoder = self.build_stacked()
         self.adversarial_autoencoder.name = "aae"
 
         # adversarial_autoencoder model  (stacked generator and discriminator)
@@ -232,12 +235,8 @@ class CDAEE():
 
         return Model(reconstructed, validity)
 
-    def train(self, epochs, batch_size=32, sample_interval=10):
+    def train(self, fetcher, epochs, batch_size=32, sample_interval=10):
         timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S %p')
-
-        df = pd.HDFStore('disfa.h5')['disfa']
-        cols = ['au_1', 'au_2', 'au_4', 'au_5', 'au_6', 'au_9', 'au_12', 'au_15', 'au_17', 'au_20', 'au_25', 'au_26', 'frame', 'img', 'sn_id']
-        df = df[cols]
 
         #list 0 is training, 1 is test
         dg_losses = [[], []]
@@ -245,69 +244,7 @@ class CDAEE():
         g_losses = [[], []]
 
         for epoch in range(epochs):
-            shuffled_ids = np.random.permutation(sn_ids)
-
-            folds = []
-
-            print("shuffled : {}".format(shuffled_ids))
-
-            # create folds
-
-            for i in range(4):
-                print("creating fold {}".format(i+1))
-                fold_ids = shuffled_ids[i * 7:min(27, (i+1)*7)]
-                fold = [[], [], []]
-
-                all_faces = df.loc[df["sn_id"].isin(fold_ids)]
-                id_faces = {sn_id : all_faces.loc[all_faces["sn_id"].isin([sn_id])] for sn_id in fold_ids}
-
-                for au in au_ids:
-                    # sample up to 2000 nonzero frames
-                    # --------------------------------
-                    # find counts of each nonzero values for all sn_ids in fold
-                    nonzero = [all_faces.loc[all_faces["au_{}".format(au)].isin([v])] for v in range(1, 6)]
-
-                    # if less than 2000, just take them all
-                    counts = [len(l) for l in nonzero]
-                    total_nonzero = sum(counts)
-                    print(total_nonzero)
-                    if total_nonzero <= 2000:
-                        fold.extend([[item.img.tolist(), list(item[1:13]), id_faces[item.sn_id].sample(1).img.tolist()[0]] for value in nonzero for item in value.itertuples()])
-                        for value in nonzero:
-                            for item in value.itertuples():
-                                fold[0].append(item.img.tolist())
-                                fold[1].append(list(item[1:13]))
-                                fold[2].append(id_faces[item.sn_id].sample(1).img.tolist()[0])
-                    else:
-                        # otherwise divide to get proportion and sample that many of each value
-                        counts = [x/float(total_nonzero) for x in counts]
-                        for i in range(len(counts)):
-                            if counts[i] == 0.0: continue
-                            items = nonzero[i].sample(int(counts[i] * 2000))
-                            for item in items.itertuples():
-                                fold[0].append(item.img.tolist())
-                                fold[1].append(list(item[1:13]))
-                                fold[2].append(id_faces[item.sn_id].sample(1).img.tolist()[0])
-
-                    del nonzero
-
-                    # sample 1000 zero frames
-                    #------------------------
-                    items = all_faces.loc[all_faces["au_{}".format(au)].isin([0])].sample(1000)
-                    print(len(items))
-
-                    for item in items.itertuples():
-                        fold.append([item.img.tolist(), list(item[1:13]), id_faces[item.sn_id].sample(1).img.tolist()[0]])
-                        fold[0].append(item.img.tolist())
-                        fold[1].append(list(item[1:13]))
-                        fold[2].append(id_faces[item.sn_id].sample(1).img.tolist()[0])
-                    print("finished au_{}".format(au))
-
-                    del items
-
-                del all_faces
-                folds.append([np.asarray(fold[0], dtype='float32')/255, np.asarray(fold[1], dtype='float32')/5, np.asarray(fold[2], dtype='float32')/255])
-                del fold
+            folds = fetcher.fetch()
 
             # train with folds
                 
