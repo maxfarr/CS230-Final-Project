@@ -351,11 +351,9 @@ class CDAEE():
                 print("[ep {} fold {} d_g te] real {} fake {}".format(epoch, i, dg_loss_real, dg_loss_fake))
                 print("[ep {} fold {} d_e te] real {} fake {}".format(epoch, i, de_loss_real, de_loss_fake))
 
-        # save models
-
-        self.disc_g.save(timestamp + '/disc_g.h5')
-        self.disc_e.save(timestamp + '/disc_e.h5')
-        self.adversarial_autoencoder.save(timestamp + '/aae.h5')
+                self.disc_g.save(timestamp + '/disc_g_{}.h5'.format(epoch))
+                self.disc_e.save(timestamp + '/disc_e_{}.h5'.format(epoch))
+                self.adversarial_autoencoder.save(timestamp + '/aae.h5')
 
         # plot
 
@@ -368,8 +366,8 @@ class CDAEE():
         g_tr = np.asarray(g_losses[0])
         g_te = np.asarray(g_losses[1])
 
-        Y_tr_len = range(len(g_tr.shape[0]))
-        Y_te_len = range(len(g_te.shape[0]))
+        Y_tr_len = range(g_tr.shape[0])
+        Y_te_len = range(g_te.shape[0])
 
         # tr
 
@@ -421,8 +419,6 @@ class CDAEE():
                 for j in range(1,c+1):
                     pooled = self.encoder1.predict(np.expand_dims(imgs[img], axis=0))
                     z = self.encoder2.predict(pooled)
-
-                    au_ids = [1, 2, 4, 5, 6, 9, 12, 15, 17, 20, 25, 26]
                     
                     label = ([0.0, 0.0, float(j - 1)/c, 0.0, 0.0, 0.0, float(i)/r, 0.0, 0.0, 0.0, 0.0, 0.0]
                     if img == 0 else ([0.0, float(j - 1)/c, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, float(i)/r, float(i)/r]
