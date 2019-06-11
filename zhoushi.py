@@ -40,7 +40,7 @@ class CDAEE():
         self.batch_size = 64
 
         optimizer = Adam(0.0001)
-        optimizer_d = Adam(0.000001)
+        optimizer_d = Adam(0.0000001)
 
         # Build and compile the discriminators
         self.disc_g = self.build_disc_g()
